@@ -1,9 +1,13 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('baileys');
-const QRCode = require('qrcode');
+const readline = require('readline');
 const fs = require('fs');
-const path = require('path');
 
 const SESSION_DIR = './auth_info';
+
+const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+});
 
 class WhatsAppHandler {
     constructor() {
@@ -18,7 +22,7 @@ class WhatsAppHandler {
         
         this.socket = makeWASocket({
             auth: state,
-            printQRInTerminal: true,
+            printQRInTerminal: false,
             browser: ['TermuxBot', 'Chrome', '120.0'],
             version: [2, 3000, 1034074495]
         });
@@ -27,11 +31,6 @@ class WhatsAppHandler {
 
         this.socket.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
-            
-            if (qr) {
-                console.log('\n📱 Scan this QR code with your WhatsApp:');
-                console.log(QRCode.toString(qr, { type: 'terminal' }));
-            }
             
             if (connection === 'close') {
                 const reason = DisconnectReason[lastDisconnect?.error] || lastDisconnect?.error;
@@ -43,10 +42,39 @@ class WhatsAppHandler {
             }
         });
 
-        await this.waitForConnection();
+        await this.requestPairingCode();
+        await this.waitForConnection(120000);
     }
 
-    async waitForConnection(timeout = 60000) {
+    async requestPairingCode() {
+        return new Promise((resolve) => {
+            rl.question('\n📱 Enter your WhatsApp phone number (with country code, e.g., 919876543210): ', async (phoneNumber) => {
+                const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+                
+                if (cleanNumber.length < 10) {
+                    console.log('❌ Invalid phone number. Please try again.');
+                    return this.requestPairingCode().then(resolve);
+                }
+
+                try {
+                    console.log('\n🔄 Generating pairing code...');
+                    const pairingCode = await this.socket.requestPairingCode(cleanNumber);
+                    console.log('\n╔════════════════════════════════════╗');
+                    console.log('║  YOUR PAIRING CODE: ' + pairingCode.padEnd(10) + '║');
+                    console.log('╚════════════════════════════════════╝');
+                    console.log('\n📝 Open WhatsApp → Settings → Linked Devices');
+                    console.log('   → Link a device → Enter the code above');
+                    resolve();
+                } catch (error) {
+                    console.error('❌ Failed to generate pairing code:', error.message);
+                    console.log('Please try again...');
+                    return this.requestPairingCode().then(resolve);
+                }
+            });
+        });
+    }
+
+    async waitForConnection(timeout = 120000) {
         return new Promise((resolve, reject) => {
             const startTime = Date.now();
             
