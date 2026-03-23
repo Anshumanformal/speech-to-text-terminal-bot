@@ -37,8 +37,8 @@ class WhatsAppHandler {
             }
         });
 
+        await this.waitForConnection();
         await this.requestPairingCode();
-        await this.waitForConnection(120000);
     }
 
     async requestPairingCode() {
