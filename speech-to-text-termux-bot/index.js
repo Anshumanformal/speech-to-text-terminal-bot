@@ -19,12 +19,12 @@ class Bot {
     constructor() {
         this.state = STATE.IDLE;
         this.currentMessage = '';
-        this.whatsapp = new WhatsAppHandler();
-        this.speech = new SpeechToText(process.env.ASSEMBLYAI_API_KEY || '');
         this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout
         });
+        this.whatsapp = new WhatsAppHandler(this.rl);
+        this.speech = new SpeechToText(process.env.ASSEMBLYAI_API_KEY || '');
     }
 
     async start() {

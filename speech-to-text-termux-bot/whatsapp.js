@@ -1,18 +1,13 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('baileys');
-const readline = require('readline');
 const fs = require('fs');
 
 const SESSION_DIR = './auth_info';
 
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-});
-
 class WhatsAppHandler {
-    constructor() {
+    constructor(rl) {
         this.socket = null;
         this.isConnected = false;
+        this.rl = rl;
     }
 
     async initialize() {
@@ -48,7 +43,7 @@ class WhatsAppHandler {
 
     async requestPairingCode() {
         return new Promise((resolve) => {
-            rl.question('\n📱 Enter your WhatsApp phone number (with country code, e.g., 919876543210): ', async (phoneNumber) => {
+            this.rl.question('\n📱 Enter your WhatsApp phone number (with country code, e.g., 919876543210): ', async (phoneNumber) => {
                 const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
                 
                 if (cleanNumber.length < 10) {
