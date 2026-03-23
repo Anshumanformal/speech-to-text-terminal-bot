@@ -19,7 +19,8 @@ class WhatsAppHandler {
         this.socket = makeWASocket({
             auth: state,
             printQRInTerminal: true,
-            browser: ['TermuxBot', 'Chrome', '120.0']
+            browser: ['TermuxBot', 'Chrome', '120.0'],
+            version: [2, 3000, 1034074495]
         });
 
         this.socket.ev.on('creds.update', saveCreds);
