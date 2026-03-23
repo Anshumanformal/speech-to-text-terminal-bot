@@ -15,6 +15,8 @@ class WhatsAppHandler {
         
         const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
         
+        console.log('[DEBUG] Creating WhatsApp socket...');
+        
         this.socket = makeWASocket({
             auth: state,
             printQRInTerminal: false,
@@ -27,18 +29,69 @@ class WhatsAppHandler {
         this.socket.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
             
-            if (connection === 'close') {
+            console.log('[DEBUG] Connection update:', {
+                connection,
+                lastDisconnect: lastDisconnect?.error || 'none',
+                qr: qr ? 'present' : 'none'
+            });
+            
+            if (connection === 'connecting') {
+                console.log('🔄 Connecting to WhatsApp...');
+            } else if (connection === 'close') {
                 const reason = DisconnectReason[lastDisconnect?.error] || lastDisconnect?.error;
                 console.log('❌ Connection closed:', reason);
+                console.log('[DEBUG] Last disconnect details:', lastDisconnect);
                 this.isConnected = false;
             } else if (connection === 'open') {
                 console.log('✅ WhatsApp connected successfully!');
                 this.isConnected = true;
+            } else if (connection === 'banner') {
+                console.log('[DEBUG] Received banner:', update);
             }
         });
 
-        await this.waitForConnection();
-        await this.requestPairingCode();
+        await this.waitForConnectionWithRetry();
+    }
+
+    async waitForConnectionWithRetry(maxRetries = 3) {
+        let retries = 0;
+        
+        while (retries < maxRetries) {
+            try {
+                console.log(`[DEBUG] Attempting connection (${retries + 1}/${maxRetries})...`);
+                await this.waitForConnection();
+                console.log('[DEBUG] Connection successful!');
+                return;
+            } catch (error) {
+                retries++;
+                console.log(`[DEBUG] Connection attempt ${retries} failed:`, error.message);
+                
+                if (retries < maxRetries) {
+                    console.log(`🔄 Retrying in 3 seconds... (${retries}/${maxRetries})`);
+                    await this.delay(3000);
+                } else {
+                    console.log('❌ All connection attempts failed.');
+                    console.log('[DEBUG] Asking user to retry manually...');
+                    
+                    return new Promise((resolve) => {
+                        this.rl.question('\n⚠️ Connection failed. Type "r" to retry or "q" to quit: ', async (answer) => {
+                            if (answer.toLowerCase() === 'r') {
+                                console.log('[DEBUG] User requested retry');
+                                await this.waitForConnectionWithRetry(maxRetries);
+                                resolve();
+                            } else if (answer.toLowerCase() === 'q') {
+                                console.log('👋 Goodbye!');
+                                process.exit(0);
+                            } else {
+                                console.log('Invalid input. Retrying...');
+                                await this.waitForConnectionWithRetry(maxRetries);
+                                resolve();
+                            }
+                        });
+                    });
+                }
+            }
+        }
     }
 
     async requestPairingCode() {
@@ -52,8 +105,10 @@ class WhatsAppHandler {
                 }
 
                 try {
+                    console.log('[DEBUG] Requesting pairing code for:', cleanNumber);
                     console.log('\n🔄 Generating pairing code...');
                     const pairingCode = await this.socket.requestPairingCode(cleanNumber);
+                    console.log('[DEBUG] Pairing code received:', pairingCode);
                     console.log('\n╔════════════════════════════════════╗');
                     console.log('║  YOUR PAIRING CODE: ' + pairingCode.padEnd(10) + '║');
                     console.log('╚════════════════════════════════════╝');
@@ -61,6 +116,7 @@ class WhatsAppHandler {
                     console.log('   → Link a device → Enter the code above');
                     resolve();
                 } catch (error) {
+                    console.error('[DEBUG] Pairing code error:', error.message);
                     console.error('❌ Failed to generate pairing code:', error.message);
                     console.log('Please try again...');
                     return this.requestPairingCode().then(resolve);
@@ -81,10 +137,14 @@ class WhatsAppHandler {
                 
                 if (Date.now() - startTime > timeout) {
                     clearInterval(checkConnection);
-                    reject(new Error('Connection timeout'));
+                    reject(new Error('Connection timeout after ' + (timeout/1000) + ' seconds'));
                 }
             }, 1000);
         });
+    }
+
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     async sendMessage(phoneNumber, message) {
