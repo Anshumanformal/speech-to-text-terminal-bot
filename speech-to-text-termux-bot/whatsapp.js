@@ -30,7 +30,7 @@ class WhatsAppHandler {
             
             if (qr) {
                 console.log('\n📱 Scan this QR code with your WhatsApp:');
-                QRCode.toConsole(qr);
+                console.log(QRCode.toString(qr));
             }
             
             if (connection === 'close') {
