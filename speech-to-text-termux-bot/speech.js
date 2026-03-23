@@ -84,7 +84,8 @@ class SpeechToText {
                     if (status === 'completed') {
                         resolve(response.data);
                     } else if (status === 'error') {
-                        reject(new Error('Transcription failed: ' + response.data.error));
+                        const errorMsg = response.data.error?.message || response.data.error || 'Unknown error';
+                        reject(new Error('Transcription failed: ' + errorMsg));
                     } else {
                         if (attempts >= maxAttempts) {
                             reject(new Error('Transcription timeout'));

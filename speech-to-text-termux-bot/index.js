@@ -163,7 +163,7 @@ class Bot {
             return;
         }
 
-        if (!phoneNumber || !/^\d{10,15}$/.test(phoneNumber.replace(/[^0-9]/g, ''))) {
+        if (!phoneNumber || !/^\d{11,15}$/.test(phoneNumber.replace(/[^0-9]/g, ''))) {
             console.log('❌ Invalid phone number. Try again.');
             return;
         }

@@ -30,7 +30,7 @@ class WhatsAppHandler {
             
             if (qr) {
                 console.log('\n📱 Scan this QR code with your WhatsApp:');
-                console.log(QRCode.toString(qr));
+                console.log(QRCode.toString(qr, { type: 'terminal' }));
             }
             
             if (connection === 'close') {
@@ -127,7 +127,7 @@ class WhatsAppHandler {
 
     async disconnect() {
         if (this.socket) {
-            this.socket.end(undefined);
+            this.socket.end();
             this.isConnected = false;
         }
     }

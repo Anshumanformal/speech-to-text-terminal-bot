@@ -64,7 +64,14 @@ async function recordAudio(timeoutSeconds = 30) {
         
         recordingProcess.on('error', (err) => {
             console.error('Recording error:', err);
+            recordingProcess.kill('SIGTERM');
             reject(err);
+        });
+        
+        recordingProcess.on('exit', (code) => {
+            if (code !== 0 && code !== null) {
+                console.log('Recording process exited with code:', code);
+            }
         });
         
         setTimeout(() => {
