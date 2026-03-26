@@ -55,7 +55,9 @@ class WhatsAppHandler {
 
         console.log('[DEBUG] Waiting for socket to start connecting...');
         await this.waitForSocketConnecting();
-        console.log('[DEBUG] Socket is now connecting, requesting pairing code...');
+        console.log('[DEBUG] Socket is now connecting, waiting for connection to stabilize...');
+        await this.delay(3000);
+        console.log('[DEBUG] Connection stabilized, requesting pairing code...');
         await this.requestPairingCode();
         await this.waitForConnectionWithRetry();
     }
@@ -138,14 +140,45 @@ class WhatsAppHandler {
                 }
 
                 const fullNumber = '91' + cleanNumber;
-                console.log('[DEBUG] Phone number input:', cleanNumber);
-                console.log('[DEBUG] Formatted number (with country code):', fullNumber);
+                console.log('[DEBUG] User entered phone number:', cleanNumber);
+                console.log('[DEBUG] Full number with country code:', fullNumber);
+                console.log('[DEBUG] Phone number length:', fullNumber.length);
+                console.log('[DEBUG] Socket ready:', this.socket ? 'yes' : 'no');
+                
+                console.log('[DEBUG] Waiting 2 seconds before requesting pairing code...');
+                await this.delay(2000);
+                
+                console.log('[DEBUG] Checking connection state before API call...');
+                console.log('[DEBUG] Current connection state:', this.connectionState);
+                console.log('[DEBUG] Is socket connected:', this.isConnected);
+                
+                if (this.connectionState === 'close') {
+                    console.error('[DEBUG] Connection already closed! Attempting to reconnect...');
+                    console.log('[DEBUG] Recreating socket...');
+                    const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
+                    this.socket = makeWASocket({
+                        auth: state,
+                        printQRInTerminal: false,
+                        browser: ['TermuxBot', 'Chrome', '120.0'],
+                        version: [2, 3000, 1034074495]
+                    });
+                    this.socket.ev.on('creds.update', saveCreds);
+                    console.log('[DEBUG] Socket recreated, waiting for connection...');
+                    await this.waitForSocketConnecting();
+                    await this.delay(3000);
+                }
 
                 try {
-                    console.log('\n[DEBUG] Calling requestPairingCode API...');
+                    console.log('\n[DEBUG] Calling socket.requestPairingCode()...');
+                    console.log('[DEBUG] Request payload:', { phoneNumber: fullNumber });
+                    
                     const pairingCode = await this.socket.requestPairingCode(fullNumber);
-                    console.log('[DEBUG] API call succeeded');
-                    console.log('[DEBUG] Pairing code response:', pairingCode);
+                    
+                    console.log('[DEBUG] API call completed successfully');
+                    console.log('[DEBUG] Response type:', typeof pairingCode);
+                    console.log('[DEBUG] Response value:', pairingCode);
+                    console.log('[DEBUG] Response length:', pairingCode ? pairingCode.toString().length : 'null');
+                    
                     console.log('\n╔════════════════════════════════════╗');
                     console.log('║  YOUR PAIRING CODE: ' + String(pairingCode).padEnd(10) + '║');
                     console.log('╚════════════════════════════════════╝');
@@ -153,10 +186,20 @@ class WhatsAppHandler {
                     console.log('   → Link a device → Enter the code above');
                     resolve();
                 } catch (error) {
-                    console.error('[DEBUG] Full error object:', error);
-                    console.error('[DEBUG] Error code:', error.code);
+                    console.error('[DEBUG] ====================');
+                    console.error('[DEBUG] PAIRING CODE ERROR');
+                    console.error('[DEBUG] ====================');
+                    console.error('[DEBUG] Error name:', error.name);
                     console.error('[DEBUG] Error message:', error.message);
-                    console.error('[DEBUG] Error stack:', error.stack);
+                    console.error('[DEBUG] Error code:', error.code);
+                    console.error('[DEBUG] Error status:', error.status);
+                    console.error('[DEBUG] Is Boom:', error.isBoom);
+                    console.error('[DEBUG] Is Server:', error.isServer);
+                    console.error('[DEBUG] Output status code:', error.output?.statusCode);
+                    console.error('[DEBUG] Output payload:', JSON.stringify(error.output?.payload));
+                    console.error('[DEBUG] Output headers:', error.output?.headers);
+                    console.error('[DEBUG] Data:', error.data);
+                    console.error('[DEBUG] Stack trace:', error.stack);
                     console.error('❌ Failed to generate pairing code:', error.message);
                     console.log('Please try again...');
                     return this.requestPairingCode().then(resolve);
