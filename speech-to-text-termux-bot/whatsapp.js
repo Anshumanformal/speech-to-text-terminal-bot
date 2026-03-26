@@ -8,6 +8,7 @@ class WhatsAppHandler {
         this.socket = null;
         this.isConnected = false;
         this.rl = rl;
+        this.connectionState = 'none';
     }
 
     async initialize() {
@@ -28,6 +29,8 @@ class WhatsAppHandler {
 
         this.socket.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
+            
+            this.connectionState = connection;
             
             console.log('[DEBUG] Connection update:', {
                 connection,
@@ -50,10 +53,37 @@ class WhatsAppHandler {
             }
         });
 
-        console.log('[DEBUG] Waiting for socket to initialize...');
-        await this.delay(2000);
+        console.log('[DEBUG] Waiting for socket to start connecting...');
+        await this.waitForSocketConnecting();
+        console.log('[DEBUG] Socket is now connecting, requesting pairing code...');
         await this.requestPairingCode();
         await this.waitForConnectionWithRetry();
+    }
+
+    async waitForSocketConnecting(timeout = 30000) {
+        return new Promise((resolve, reject) => {
+            const startTime = Date.now();
+            
+            const checkState = setInterval(() => {
+                console.log('[DEBUG] Current connection state:', this.connectionState);
+                
+                if (this.connectionState === 'connecting') {
+                    clearInterval(checkState);
+                    console.log('[DEBUG] Connection state is now: connecting');
+                    resolve(true);
+                }
+                
+                if (this.connectionState === 'close') {
+                    clearInterval(checkState);
+                    reject(new Error('Connection closed before pairing code could be requested'));
+                }
+                
+                if (Date.now() - startTime > timeout) {
+                    clearInterval(checkState);
+                    reject(new Error('Timeout waiting for socket to start connecting'));
+                }
+            }, 500);
+        });
     }
 
     async waitForConnectionWithRetry(maxRetries = 3) {
