@@ -50,6 +50,8 @@ class WhatsAppHandler {
             }
         });
 
+        console.log('[DEBUG] Waiting for socket to initialize...');
+        await this.delay(2000);
         await this.requestPairingCode();
         await this.waitForConnectionWithRetry();
     }
