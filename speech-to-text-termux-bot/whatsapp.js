@@ -21,7 +21,7 @@ class WhatsAppHandler {
         this.socket = makeWASocket({
             auth: state,
             printQRInTerminal: false,
-            browser: ['TermuxBot', 'Chrome', '120.0'],
+            browser: ['Ubuntu', 'Chrome', '20.0.04'],
             version: [2, 3000, 1034074495]
         });
 
@@ -57,7 +57,17 @@ class WhatsAppHandler {
         await this.waitForSocketConnecting();
         console.log('[DEBUG] Socket is now connecting, waiting for connection to stabilize...');
         await this.delay(3000);
-        console.log('[DEBUG] Connection stabilized, requesting pairing code...');
+        
+        const isRegistered = this.socket.authState?.creds?.registered;
+        console.log('[DEBUG] Registration status:', isRegistered ? 'already registered' : 'not registered');
+        
+        if (isRegistered) {
+            console.log('[DEBUG] Already registered, skipping pairing code...');
+            await this.waitForConnectionWithRetry();
+            return;
+        }
+        
+        console.log('[DEBUG] Not registered, requesting pairing code...');
         await this.requestPairingCode();
         await this.waitForConnectionWithRetry();
     }
