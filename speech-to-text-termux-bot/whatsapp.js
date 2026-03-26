@@ -9,6 +9,7 @@ class WhatsAppHandler {
         this.isConnected = false;
         this.rl = rl;
         this.connectionState = 'none';
+        this.loginStartTime = null;
     }
 
     async initialize() {
@@ -32,25 +33,32 @@ class WhatsAppHandler {
             
             this.connectionState = connection;
             
-            console.log('[DEBUG] Connection update:', {
-                connection,
-                lastDisconnect: lastDisconnect?.error || 'none',
-                qr: qr ? 'present' : 'none'
-            });
+            console.log('[DEBUG] ========== CONNECTION UPDATE ==========');
+            console.log('[DEBUG] Timestamp:', new Date().toISOString());
+            console.log('[DEBUG] Connection state:', connection);
+            console.log('[DEBUG] Last disconnect error:', lastDisconnect?.error || 'none');
+            console.log('[DEBUG] QR present:', qr ? 'yes' : 'no');
             
             if (connection === 'connecting') {
                 console.log('🔄 Connecting to WhatsApp...');
             } else if (connection === 'close') {
                 const reason = DisconnectReason[lastDisconnect?.error] || lastDisconnect?.error;
                 console.log('❌ Connection closed:', reason);
-                console.log('[DEBUG] Last disconnect details:', lastDisconnect);
+                console.log('[DEBUG] Full disconnect error:', JSON.stringify(lastDisconnect, null, 2));
                 this.isConnected = false;
             } else if (connection === 'open') {
                 console.log('✅ WhatsApp connected successfully!');
                 this.isConnected = true;
             } else if (connection === 'banner') {
                 console.log('[DEBUG] Received banner:', update);
+            } else if (connection === null) {
+                console.log('[DEBUG] Connection state is null (waiting for auth)...');
             }
+            
+            const registered = this.socket?.authState?.creds?.registered;
+            console.log('[DEBUG] Registration status:', registered ? 'REGISTERED' : 'NOT registered');
+            console.log('[DEBUG] Creds device info:', this.socket?.authState?.creds?.deviceMetaData || 'none');
+            console.log('[DEBUG] ==========================================\n');
         });
 
         console.log('[DEBUG] Waiting for socket to start connecting...');
@@ -169,7 +177,7 @@ class WhatsAppHandler {
                     this.socket = makeWASocket({
                         auth: state,
                         printQRInTerminal: false,
-                        browser: ['TermuxBot', 'Chrome', '120.0'],
+                        browser: ['Ubuntu', 'Chrome', '20.0.04'],
                         version: [2, 3000, 1034074495]
                     });
                     this.socket.ev.on('creds.update', saveCreds);
@@ -194,6 +202,13 @@ class WhatsAppHandler {
                     console.log('╚════════════════════════════════════╝');
                     console.log('\n📝 Open WhatsApp → Settings → Linked Devices');
                     console.log('   → Link a device → Enter the code above');
+                    console.log('\n[DEBUG] === PAIRING CODE DISPLAYED ===');
+                    console.log('[DEBUG] Waiting for you to enter code in WhatsApp...');
+                    console.log('[DEBUG] Monitoring connection state...\n');
+                    
+                    this.loginStartTime = Date.now();
+                    this.startLoginMonitoring();
+                    
                     resolve();
                 } catch (error) {
                     console.error('[DEBUG] ====================');
@@ -219,21 +234,82 @@ class WhatsAppHandler {
     }
 
     async waitForConnection(timeout = 120000) {
+        const startTime = Date.now();
+        const loginCheckInterval = 5000;
+        let lastLoggedElapsed = 0;
+        
         return new Promise((resolve, reject) => {
-            const startTime = Date.now();
-            
             const checkConnection = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                
+                if (elapsed >= lastLoggedElapsed + 5 || elapsed === 0) {
+                    lastLoggedElapsed = elapsed;
+                    const registered = this.socket?.authState?.creds?.registered;
+                    console.log(`[DEBUG] Wait for connection: ${elapsed}s elapsed | State: ${this.connectionState} | Registered: ${registered ? 'YES' : 'NO'}`);
+                }
+                
                 if (this.isConnected) {
                     clearInterval(checkConnection);
+                    console.log('[DEBUG] Connection established! Breaking wait loop.');
                     resolve(true);
+                }
+                
+                if (this.connectionState === 'close') {
+                    clearInterval(checkConnection);
+                    console.log('[DEBUG] Connection closed during wait! Rejecting...');
+                    reject(new Error('Connection closed while waiting'));
                 }
                 
                 if (Date.now() - startTime > timeout) {
                     clearInterval(checkConnection);
-                    reject(new Error('Connection timeout after ' + (timeout/1000) + ' seconds'));
+                    const elapsedSec = Math.floor(timeout / 1000);
+                    console.log(`[DEBUG] Connection timeout after ${elapsedSec} seconds`);
+                    console.log('[DEBUG] Final state:', this.connectionState);
+                    console.log('[DEBUG] Final registration:', this.socket?.authState?.creds?.registered);
+                    reject(new Error('Connection timeout after ' + elapsedSec + ' seconds'));
                 }
             }, 1000);
         });
+    }
+
+    startLoginMonitoring() {
+        const checkInterval = setInterval(() => {
+            if (!this.loginStartTime) {
+                clearInterval(checkInterval);
+                return;
+            }
+            
+            const elapsed = Math.floor((Date.now() - this.loginStartTime) / 1000);
+            const registered = this.socket?.authState?.creds?.registered;
+            
+            console.log(`[DEBUG] Login check: ${elapsed}s | State: ${this.connectionState} | Registered: ${registered ? 'YES' : 'NO'}`);
+            
+            if (this.isConnected || this.connectionState === 'open') {
+                console.log('[DEBUG] ✅ LOGIN COMPLETE - Connection is open!');
+                clearInterval(checkInterval);
+                this.loginStartTime = null;
+            }
+            
+            if (this.connectionState === 'close') {
+                console.log('[DEBUG] ❌ LOGIN FAILED - Connection closed');
+                clearInterval(checkInterval);
+                this.loginStartTime = null;
+            }
+            
+            if (elapsed > 60) {
+                console.log('[DEBUG] ⚠️ Login taking longer than 60s...');
+                console.log('[DEBUG] Please check:');
+                console.log('[DEBUG]   1. Did you enter the code in WhatsApp?');
+                console.log('[DEBUG]   2. Check WhatsApp → Linked Devices');
+                console.log('[DEBUG]   3. Is your phone connected to internet?');
+            }
+            
+            if (elapsed > 120) {
+                console.log('[DEBUG] ⏱️ Login timeout after 120s');
+                clearInterval(checkInterval);
+                this.loginStartTime = null;
+            }
+        }, 5000);
     }
 
     delay(ms) {
