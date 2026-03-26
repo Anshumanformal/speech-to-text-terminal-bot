@@ -1,5 +1,6 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('baileys');
 const fs = require('fs');
+const qrcode = require('qrcode');
 
 const SESSION_DIR = './auth_info';
 
@@ -26,7 +27,7 @@ class WhatsAppHandler {
 
         this.socket.ev.on('creds.update', saveCreds);
 
-        this.socket.ev.on('connection.update', (update) => {
+        this.socket.ev.on('connection.update', async (update) => {
             const { connection, lastDisconnect, qr } = update;
             
             console.log('[DEBUG] Connection update:', {
@@ -34,6 +35,18 @@ class WhatsAppHandler {
                 lastDisconnect: lastDisconnect?.error || 'none',
                 qr: qr ? 'present' : 'none'
             });
+
+            if (qr) {
+                console.log('[DEBUG] Generating QR code...');
+                await qrcode.toFile('./qrcode.png', qr, {
+                    type: 'png',
+                    width: 300,
+                    margin: 2
+                });
+                console.log('📷 QR code saved to qrcode.png');
+                console.log('   Open the image file to scan with WhatsApp');
+                console.log('   (QR code will be overwritten when refreshed)\n');
+            }
             
             if (connection === 'connecting') {
                 console.log('🔄 Connecting to WhatsApp...');
