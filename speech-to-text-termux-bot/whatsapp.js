@@ -99,27 +99,34 @@ class WhatsAppHandler {
 
     async requestPairingCode() {
         return new Promise((resolve) => {
-            this.rl.question('\n📱 Enter your WhatsApp phone number (with country code, e.g., 919876543210): ', async (phoneNumber) => {
+            this.rl.question('\n📱 Enter your 10-digit phone number (without country code): ', async (phoneNumber) => {
                 const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
                 
-                if (cleanNumber.length < 10) {
-                    console.log('❌ Invalid phone number. Please try again.');
+                if (cleanNumber.length !== 10) {
+                    console.log('❌ Please enter exactly 10 digits.');
                     return this.requestPairingCode().then(resolve);
                 }
 
+                const fullNumber = '91' + cleanNumber;
+                console.log('[DEBUG] Phone number input:', cleanNumber);
+                console.log('[DEBUG] Formatted number (with country code):', fullNumber);
+
                 try {
-                    console.log('[DEBUG] Requesting pairing code for:', cleanNumber);
-                    console.log('\n🔄 Generating pairing code...');
-                    const pairingCode = await this.socket.requestPairingCode(cleanNumber);
-                    console.log('[DEBUG] Pairing code received:', pairingCode);
+                    console.log('\n[DEBUG] Calling requestPairingCode API...');
+                    const pairingCode = await this.socket.requestPairingCode(fullNumber);
+                    console.log('[DEBUG] API call succeeded');
+                    console.log('[DEBUG] Pairing code response:', pairingCode);
                     console.log('\n╔════════════════════════════════════╗');
-                    console.log('║  YOUR PAIRING CODE: ' + pairingCode.padEnd(10) + '║');
+                    console.log('║  YOUR PAIRING CODE: ' + String(pairingCode).padEnd(10) + '║');
                     console.log('╚════════════════════════════════════╝');
                     console.log('\n📝 Open WhatsApp → Settings → Linked Devices');
                     console.log('   → Link a device → Enter the code above');
                     resolve();
                 } catch (error) {
-                    console.error('[DEBUG] Pairing code error:', error.message);
+                    console.error('[DEBUG] Full error object:', error);
+                    console.error('[DEBUG] Error code:', error.code);
+                    console.error('[DEBUG] Error message:', error.message);
+                    console.error('[DEBUG] Error stack:', error.stack);
                     console.error('❌ Failed to generate pairing code:', error.message);
                     console.log('Please try again...');
                     return this.requestPairingCode().then(resolve);
